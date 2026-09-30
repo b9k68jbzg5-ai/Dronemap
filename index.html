@@ -19,7 +19,7 @@ button.sec{background:var(--bg);color:var(--ac);border:1px solid var(--bd)}
 button:disabled{opacity:.5}
 .res div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)}
 .res div:last-child{border:0}
-.res b{font-variant-numeric:tabular-nums;text-align:right}
+.res b{font-variant-numeric:tabular-nums;text-align:right;white-space:pre-line}
 a{color:var(--ac)}
 .note{font-size:13px;color:var(--mut)}
 #err{color:#d92d20;font-size:14px;margin:8px 0 0}
@@ -45,8 +45,8 @@ a{color:var(--ac)}
 <div id="err"></div>
 </div>
 <div class="card res" id="out" hidden>
-<div><span>Широта цели</span><b id="r1"></b></div>
-<div><span>Долгота цели</span><b id="r2"></b></div>
+<label>Показать цель в системе</label><select id="oc"><option value="dd">WGS-84 dd.dddddd</option><option value="dms">WGS-84 гр мин сек</option><option value="utm">UTM</option><option value="mgrs">MGRS</option><option value="sk42">СК-42 (Гаусса–Крюгера)</option></select>
+<div><span>Координаты цели</span><b id="r1"></b></div>
 <div><span>Расстояние по земле</span><b id="rd"></b></div>
 <div><span>Наклонная дальность</span><b id="rs"></b></div>
 <div><span>Высота рельефа в цели</span><b id="re"></b></div>
@@ -109,7 +109,36 @@ function mode(){const m=$('cs').value,one=m==='utm'||m==='mgrs'||m==='sk42';
  $('onel').textContent={utm:'UTM: зона, полоса, восток, север',mgrs:'MGRS',sk42:'СК-42: X (север) Y (восток)'}[m]||'';
  $('pos').placeholder={utm:'38T 444000 4450000',mgrs:'38TLK1234567890',sk42:'4450000 8512345'}[m]||'';
  if(!one){$('lat').placeholder=m==='dd'?'40.175000':'40 10 30.5 N';$('lon').placeholder=m==='dd'?'44.504000':'44 30 14.4 E'}}
-$('cs').onchange=mode;mode();
+mode();
+function tmFwd(a,f,k0,l0,lat,lon){
+ const e2=f*(2-f),ep=e2/(1-e2),p=lat*RAD,s=Math.sin(p),c=Math.cos(p),t=Math.tan(p),n=a/Math.sqrt(1-e2*s*s),T=t*t,C=ep*c*c,A=(lon-l0)*RAD*c,
+ M=a*((1-e2/4-3*e2*e2/64-5*e2**3/256)*p-(3*e2/8+3*e2*e2/32+45*e2**3/1024)*Math.sin(2*p)+(15*e2*e2/256+45*e2**3/1024)*Math.sin(4*p)-35*e2**3/3072*Math.sin(6*p));
+ return[500000+k0*n*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep)*A**5/120),
+  k0*(M+n*t*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep)*A**6/720))]}
+function utmF(lat,lon){const z=Math.floor((lon+180)/6)+1,[E,N]=tmFwd(6378137,1/298.257223563,0.9996,6*z-183,lat,lon);
+ return{z,E,N:lat<0?N+1e7:N,b:'CDEFGHJKLMNPQRSTUVWX'[Math.min(19,Math.max(0,Math.floor((lat+80)/8)))]}}
+function mgrsF(u){const col=['STUVWXYZ','ABCDEFGH','JKLMNPQR'][u.z%3][Math.floor(u.E/1e5)-1],
+ row='ABCDEFGHJKLMNPQRSTUV'[(Math.floor(u.N/1e5)%20+(u.z%2?0:5))%20],p=v=>String(Math.floor(v%1e5)).padStart(5,'0');
+ return u.z+u.b+col+row+' '+p(u.E)+' '+p(u.N)}
+function sk42F(lat,lon){
+ const A=6378137,F=1/298.257223563,E2=F*(2-F),p=lat*RAD,l=lon*RAD,n=A/Math.sqrt(1-E2*Math.sin(p)**2),
+ as=RAD/3600,ry=0.35*as,rz=0.82*as,s=-0.12e-6,
+ vx=(n*Math.cos(p)*Math.cos(l)-23.92)/(1+s),vy=(n*Math.cos(p)*Math.sin(l)+141.27)/(1+s),vz=(n*(1-E2)*Math.sin(p)+80.9)/(1+s),
+ X=vx+rz*vy-ry*vz,Y=-rz*vx+vy,Z=ry*vx+vz,a=6378245,f=1/298.3,e2=f*(2-f),q=Math.hypot(X,Y);
+ let ph=Math.atan2(Z,q*(1-e2));
+ for(let i=0;i<6;i++){const m=a/Math.sqrt(1-e2*Math.sin(ph)**2);ph=Math.atan2(Z+e2*m*Math.sin(ph),q)}
+ const la=ph/RAD,lo=Math.atan2(Y,X)/RAD,z=Math.floor(lo/6)+1,[E,N]=tmFwd(a,f,1,6*z-3,la,lo);
+ return'X '+N.toFixed(0)+'\nY '+(z*1e6+E).toFixed(0)}
+function dms(v,p,n){const s=v<0?n:p;v=Math.abs(v);const d=Math.floor(v),m=Math.floor((v-d)*60),x=((v-d)*60-m)*60;return d+'° '+m+"' "+x.toFixed(1)+'" '+s}
+function fmt(lat,lon,m){
+ if(m==='dd')return lat.toFixed(6)+', '+lon.toFixed(6);
+ if(m==='dms')return dms(lat,'N','S')+'\n'+dms(lon,'E','W');
+ if(m==='sk42')return sk42F(lat,lon);
+ const u=utmF(lat,lon);return m==='utm'?u.z+u.b+' '+u.E.toFixed(0)+' '+u.N.toFixed(0):mgrsF(u)}
+let LAST=null;
+function show(){if(LAST)$('r1').textContent=fmt(LAST.lat,LAST.lon,$('oc').value)}
+$('oc').onchange=show;
+$('cs').onchange=()=>{mode();$('oc').value=$('cs').value;show()};
 const dec=new Map();
 async function tile(x,y){
  const k=x+'/'+y;if(dec.has(k))return dec.get(k);
@@ -153,7 +182,7 @@ $('go').onclick=async()=>{
   const r=await trace(lat,lon,H,az,ang);
   if(!r){e.textContent='Луч не достиг земли за 40 км (наклон слишком мал).';return}
   e.textContent='';
-  $('r1').textContent=r.lat.toFixed(6);$('r2').textContent=r.lon.toFixed(6);
+  LAST=r;show();
   $('rd').textContent=r.d.toFixed(0)+' м';$('rs').textContent=Math.hypot(r.d,H-r.e).toFixed(0)+' м';
   $('re').textContent=r.e.toFixed(0)+' м';$('rh').textContent=H.toFixed(0)+' м';
   $('map').href='https://maps.apple.com/?ll='+r.lat.toFixed(6)+','+r.lon.toFixed(6)+'&q=Цель';
@@ -168,12 +197,4 @@ async function status(){
 $('dl').onclick=async()=>{
  if(!window.caches||location.protocol!=='https:'){$('dlst').textContent='Скачивание работает только на странице по https-ссылке (GitHub Pages), не из файла и не из чата. Сейчас адрес: '+location.protocol+'//'+(location.host||'файл');return}
  $('dl').disabled=true;let last='';
- const list=tileList(),c=await caches.open('dem-v1');let done=0,fail=0;const q=list.slice();
- async function w(){while(q.length){const[x,y]=q.shift(),u=TU(Z,x,y);
-  try{if(!(await c.match(u))){const r=await fetch(u,{mode:'cors'});if(r.ok)await c.put(u,r);else{fail++;last='HTTP '+r.status}}}catch(ex){fail++;last=String(ex&&ex.message||ex)}
-  done++;$('dlst').textContent='Скачиваю: '+done+' из '+list.length+(fail?', ошибок '+fail+' ('+last+')':'')}}
- await Promise.all(Array.from({length:6},w));
- await status();$('dl').disabled=false};
-status().catch(()=>{$('dlst').textContent='Кэш недоступен в этом режиме браузера.'});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-</script></body></html>
+ const list=tileList(),c=await caches.open('dem-v1');let done=0,fail
