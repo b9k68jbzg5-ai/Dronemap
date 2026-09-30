@@ -14,6 +14,7 @@ label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
 input,select{width:100%;box-sizing:border-box;font-size:17px;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 button{width:100%;font-size:17px;padding:13px;border:0;border-radius:12px;background:var(--ac);color:#fff;font-weight:600;margin-top:10px}
+[hidden]{display:none!important}
 button.sec{background:var(--bg);color:var(--ac);border:1px solid var(--bd)}
 button:disabled{opacity:.5}
 .res div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)}
@@ -25,10 +26,13 @@ a{color:var(--ac)}
 </style></head><body>
 <h1>Точка, куда смотрит дрон</h1>
 <div class="card">
-<div class="row">
-<div><label>Широта дрона, dd.dddddd</label><input id="lat" inputmode="decimal" placeholder="40.175000"></div>
-<div><label>Долгота дрона, dd.dddddd</label><input id="lon" inputmode="decimal" placeholder="44.504000"></div>
+<label>Система координат</label>
+<select id="cs"><option value="dd">WGS-84 dd.dddddd</option><option value="dms">WGS-84 гр мин сек</option><option value="utm">UTM</option><option value="mgrs">MGRS</option><option value="sk42">СК-42 (Гаусса–Крюгера)</option></select>
+<div class="row" id="ll">
+<div><label>Широта дрона</label><input id="lat" placeholder="40.175000"></div>
+<div><label>Долгота дрона</label><input id="lon" placeholder="44.504000"></div>
 </div>
+<div id="one" hidden><label id="onel"></label><input id="pos"></div>
 <div class="row">
 <div><label>Высота дрона, м</label><input id="alt" inputmode="decimal" placeholder="120"></div>
 <div><label>Высота отсчитывается</label><select id="hm"><option value="rel">от точки под дроном</option><option value="asl">от уровня моря</option></select></div>
@@ -67,6 +71,45 @@ const tx=(lon,z)=>(lon+180)/360*2**z;
 const ty=(lat,z)=>{const r=lat*RAD;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*2**z};
 function tileList(){const a=[],x0=Math.floor(tx(BB.w,Z)),x1=Math.floor(tx(BB.e,Z)),y0=Math.floor(ty(BB.n,Z)),y1=Math.floor(ty(BB.s,Z));
  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)a.push([x,y]);return a}
+function tmInv(a,f,k0,l0,E,N){const e2=f*(2-f),ep=e2/(1-e2),M=N/k0,e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2)),
+ mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2**3/256)),
+ p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+151*e1**3/96*Math.sin(6*mu)+1097*e1**4/512*Math.sin(8*mu),
+ s=Math.sin(p1),c=Math.cos(p1),t=Math.tan(p1),C=ep*c*c,T=t*t,n=a/Math.sqrt(1-e2*s*s),R=a*(1-e2)/(1-e2*s*s)**1.5,D=(E-500000)/(n*k0);
+ const la=p1-n*t/R*(D*D/2-(5+3*T+10*C-4*C*C-9*ep)*D**4/24+(61+90*T+298*C+45*T*T-252*ep-3*C*C)*D**6/720);
+ const lo=l0*RAD+(D-(1+2*T+C)*D**3/6+(5-2*C+28*T-3*C*C+8*ep+24*T*T)*D**5/120)/c;
+ return[la/RAD,lo/RAD]}
+const utmInv=(z,E,N,north)=>tmInv(6378137,1/298.257223563,0.9996,6*z-183,E,north?N:N-1e7);
+function sk42(lat,lon){
+ const a=6378245,f=1/298.3,e2=f*(2-f),p=lat*RAD,l=lon*RAD,n=a/Math.sqrt(1-e2*Math.sin(p)**2),
+ X=n*Math.cos(p)*Math.cos(l),Y=n*Math.cos(p)*Math.sin(l),Z=n*(1-e2)*Math.sin(p),
+ as=RAD/3600,ry=0.35*as,rz=0.82*as,s=-0.12e-6,
+ X2=23.92+(1+s)*(X-rz*Y+ry*Z),Y2=-141.27+(1+s)*(rz*X+Y),Z2=-80.9+(1+s)*(-ry*X+Z),
+ A=6378137,F=1/298.257223563,E2=F*(2-F),q=Math.hypot(X2,Y2);
+ let ph=Math.atan2(Z2,q*(1-E2));
+ for(let i=0;i<6;i++){const m=A/Math.sqrt(1-E2*Math.sin(ph)**2);ph=Math.atan2(Z2+E2*m*Math.sin(ph),q)}
+ return[ph/RAD,Math.atan2(Y2,X2)/RAD]}
+function pos(){const m=$('cs').value;
+ if(m==='dd'||m==='dms')return[coord('lat'),coord('lon')];
+ const t=$('pos').value.trim().replace(/,/g,'.').toUpperCase(),bad=[NaN,NaN];
+ if(m==='utm'){const r=t.match(/^(\d{1,2})\s*([C-X])\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/);return r?utmInv(+r[1],+r[3],+r[4],r[2]>='N'):bad}
+ if(m==='sk42'){const r=t.match(/\d+(?:\.\d+)?/g);if(!r||r.length!==2)return bad;
+  let X=+r[0],Y=+r[1],z=8;if(Y>=1e6){z=Math.floor(Y/1e6);Y%=1e6}
+  const[la,lo]=tmInv(6378245,1/298.3,1,6*z-3,Y,X);return sk42(la,lo)}
+ const r=t.replace(/\s+/g,'').match(/^(\d{1,2})([C-X])([A-HJ-NP-Z])([A-HJ-NP-V])(\d*)$/);
+ if(!r||r[5].length%2)return bad;
+ const z=+r[1],h=r[5].length/2,sc=10**(5-h),e=h?+r[5].slice(0,h)*sc:0,nn=h?+r[5].slice(h)*sc:0,
+  ci=['STUVWXYZ','ABCDEFGH','JKLMNPQR'][z%3].indexOf(r[3]),ri='ABCDEFGHJKLMNPQRSTUV'.indexOf(r[4]);
+ if(ci<0||ri<0)return bad;
+ const n100=(ri-(z%2?0:5)+20)%20;
+ for(let k=0;k<5;k++){const v=utmInv(z,(ci+1)*1e5+e,n100*1e5+k*2e6+nn,true);
+  if('CDEFGHJKLMNPQRSTUVWX'[Math.min(19,Math.floor((v[0]+80)/8))]===r[2])return v}
+ return bad}
+function mode(){const m=$('cs').value,one=m==='utm'||m==='mgrs'||m==='sk42';
+ $('ll').hidden=one;$('one').hidden=!one;
+ $('onel').textContent={utm:'UTM: зона, полоса, восток, север',mgrs:'MGRS',sk42:'СК-42: X (север) Y (восток)'}[m]||'';
+ $('pos').placeholder={utm:'38T 444000 4450000',mgrs:'38TLK1234567890',sk42:'4450000 8512345'}[m]||'';
+ if(!one){$('lat').placeholder=m==='dd'?'40.175000':'40 10 30.5 N';$('lon').placeholder=m==='dd'?'44.504000':'44 30 14.4 E'}}
+$('cs').onchange=mode;mode();
 const dec=new Map();
 async function tile(x,y){
  const k=x+'/'+y;if(dec.has(k))return dec.get(k);
@@ -99,8 +142,8 @@ async function trace(lat,lon,H,az,ang){
  return null}
 $('go').onclick=async()=>{
  const e=$('err');e.textContent='';$('out').hidden=true;
- const lat=coord('lat'),lon=coord('lon'),alt=num('alt'),az=num('az'),ang=Math.abs(num('ang'));
- if([lat,lon,alt,az,ang].some(isNaN)){e.textContent='Заполните все поля.';return}
+ const[lat,lon]=pos(),alt=num('alt'),az=num('az'),ang=Math.abs(num('ang'));
+ if([lat,lon,alt,az,ang].some(isNaN)){e.textContent='Заполните все поля (проверьте формат координат).';return}
  if(ang<=0||ang>90){e.textContent='Наклон вниз должен быть от 0 до 90°.';return}
  if(lat<BB.s||lat>BB.n||lon<BB.w||lon>BB.e){e.textContent='Дрон вне района Армении.';return}
  $('go').disabled=true;e.textContent='Считаю…';
