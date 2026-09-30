@@ -195,6 +195,17 @@ async function status(){
  $('dlst').textContent='Рельеф Армении: загружено '+k+' из '+n+' тайлов'+(k>=n?' (готово для работы без сети)':'');
  return[n,k]}
 $('dl').onclick=async()=>{
- if(!window.caches||location.protocol!=='https:'){$('dlst').textContent='Скачивание работает только на странице по https-ссылке (GitHub Pages), не из файла и не из чата. Сейчас адрес: '+location.protocol+'//'+(location.host||'файл');return}
- $('dl').disabled=true;let last='';
- const list=tileList(),c=await caches.open('dem-v1');let done=0,fail
+ if(!window.caches||location.protocol!=='https:'){$('dlst').textContent='Скачивание работает только по https-ссылке (GitHub Pages), не из файла и не из чата. Сейчас адрес: '+location.protocol+'//'+(location.host||'файл');return}
+ $('dl').disabled=true;
+ const list=tileList(),c=await caches.open('dem-v1');let done=0,fail=0,i=0;
+ const worker=async()=>{while(i<list.length){const[x,y]=list[i++],url=TU(Z,x,y);
+  try{if(!(await c.match(url))){const r=await fetch(url,{mode:'cors'});if(!r.ok)throw 0;await c.put(url,r)}}catch(e){fail++}
+  done++;$('dlst').textContent='Скачано '+done+' из '+list.length+(fail?' (ошибок: '+fail+')':'')}};
+ await Promise.all([worker(),worker(),worker(),worker()]);
+ $('dl').disabled=false;
+ try{await status()}catch(e){}
+ if(fail)$('dlst').textContent+=' — нажмите ещё раз, чтобы докачать';
+};
+(async()=>{try{await Promise.race([status(),new Promise((_,j)=>setTimeout(j,4000))])}catch(e){$('dlst').textContent='Рельеф Армении: не удалось проверить, нажмите «Скачать»'}})();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
