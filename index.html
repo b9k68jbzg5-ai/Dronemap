@@ -337,4 +337,5 @@ $('dl').onclick=async()=>{
 (async()=>{try{await Promise.race([status(),new Promise((_,j)=>setTimeout(j,4000))])}catch(e){$('dlst').textContent='Рельеф Армении: не удалось проверить, нажмите «Скачать»'}})();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
-</script></body></html>
+</script><script src="tri.js"></script></body></html>
+
