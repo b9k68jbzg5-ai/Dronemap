@@ -23,9 +23,11 @@ button:disabled{opacity:.5}
 .res b{font-variant-numeric:tabular-nums;text-align:right;white-space:pre-line}
 a{color:var(--ac)}
 .note{font-size:13px;color:var(--mut)}
-#err{color:#d92d20;font-size:14px;margin:8px 0 0}
+#err,#te{color:#d92d20;font-size:14px;margin:8px 0 0}
 #mp{height:360px;border-radius:12px;margin-top:8px}
 .leaflet-tooltip{font-size:12px;line-height:1.3}
+details{margin-top:10px}summary{font-size:14px;color:var(--ac)}
+canvas{width:100%;height:150px;border-radius:10px;background:var(--bg)}
 </style></head><body>
 <script>window.onerror=function(m,s,l){var d=document.getElementById('dlst');if(d)d.textContent='Ошибка скрипта: '+m+' (строка '+l+')';return false};</script>
 <h1>Точка, куда смотрит дрон</h1>
@@ -39,12 +41,18 @@ a{color:var(--ac)}
 <div id="one" hidden><label id="onel"></label><input id="pos"></div>
 <div class="row">
 <div><label>Высота дрона, м</label><input id="alt" inputmode="decimal" placeholder="120"></div>
-<div><label>Высота отсчитывается</label><select id="hm"><option value="rel">от точки под дроном</option><option value="asl">от уровня моря</option></select></div>
+<div><label>Высота отсчитывается</label><select id="hm"><option value="rel">от точки под дроном</option><option value="to">от точки взлёта</option><option value="asl">от уровня моря</option></select></div>
 </div>
+<div id="tw" hidden><label>Высота точки взлёта над морем, м</label><input id="to" inputmode="decimal" placeholder="1500"></div>
 <div class="row">
 <div><label>Азимут камеры, °</label><input id="az" inputmode="decimal" placeholder="0–360"></div>
 <div><label>Наклон камеры вниз, °</label><input id="ang" inputmode="decimal" placeholder="30 или -30"></div>
 </div>
+<details><summary>Погрешность на карте</summary>
+<label>Показывать</label><select id="eb"><option value="area">Область (многоугольник)</option><option value="circle">Круг</option><option value="none">Не показывать</option></select>
+<div class="row"><div><label>Азимут ±, °</label><input id="ea" value="1" inputmode="decimal"></div><div><label>Наклон ±, °</label><input id="ei" value="1" inputmode="decimal"></div></div>
+<label>Высота дрона ±, м</label><input id="eh" value="5" inputmode="decimal">
+</details>
 <button id="go">Рассчитать</button>
 <div id="err"></div>
 </div>
@@ -55,7 +63,22 @@ a{color:var(--ac)}
 <div><span>Наклонная дальность</span><b id="rs"></b></div>
 <div><span>Высота рельефа в цели</span><b id="re"></b></div>
 <div><span>Высота дрона над морем</span><b id="rh"></b></div>
+<div><span>Разброс цели (радиус)</span><b id="rq"></b></div>
 <div><span><a id="map" href="#">Открыть в Картах</a></span><b></b></div>
+<label>Профиль луча (вид сбоку)</label>
+<canvas id="pf"></canvas>
+</div>
+<div class="card">
+<label>Замер с двух точек (триангуляция)</label>
+<p class="note" style="margin:0">Наведите камеру на цель с двух разных мест и введите положение дрона и азимут. Рельеф и высота не нужны. Координаты: dd.dddddd или гр мин сек. Лучше, если угол между направлениями от 30° до 150°.</p>
+<div class="row"><div><label>Точка 1: широта</label><input id="a1" placeholder="40.175000"></div><div><label>Точка 1: долгота</label><input id="o1" placeholder="44.504000"></div></div>
+<label>Точка 1: азимут на цель, °</label><input id="z1" inputmode="decimal">
+<div class="row"><div><label>Точка 2: широта</label><input id="a2"></div><div><label>Точка 2: долгота</label><input id="o2"></div></div>
+<label>Точка 2: азимут на цель, °</label><input id="z2" inputmode="decimal">
+<label>Показать цель в системе</label><select id="tc"></select>
+<button id="tg">Найти пересечение</button>
+<div id="te"></div>
+<div class="res" id="tr" hidden></div>
 </div>
 <div class="card" id="mc" hidden>
 <label>Карта</label><select id="bm"><option value="sat">Спутник</option><option value="osm">Схема</option></select>
@@ -65,7 +88,7 @@ a{color:var(--ac)}
 <div id="dlst" class="note">Рельеф Армении: проверяю…</div>
 <button class="sec" id="dl">Скачать рельеф Армении (~200 МБ, по Wi-Fi)</button>
 </div>
-<p class="note">Высота дрона «от точки под дроном» берётся как высота рельефа под дроном плюс ваше число. Если на экране пульта высота относительно точки взлёта, а вы сейчас не над ней, выберите «от уровня моря» или введите сумму сами. Наклон −30 и 30 понимаются одинаково: вниз. Карта подгружается по мере просмотра: чтобы она работала без сети, заранее посмотрите нужный район при интернете.</p>
+<p class="note">Высота «от точки под дроном» берётся как высота рельефа под дроном плюс ваше число. «От точки взлёта»: отметка взлёта плюс высота с экрана пульта. Наклон −30 и 30 понимаются одинаково: вниз. Карта подгружается по мере просмотра: чтобы она работала без сети, заранее посмотрите нужный район при интернете.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const Z=12,DEM='dem-v2',BB={s:38.8,n:41.35,w:43.4,e:46.65},Rr=6371008.8,RAD=Math.PI/180;
@@ -144,10 +167,12 @@ function fmt(lat,lon,m){
  if(m==='dms')return dms(lat,'N','S')+'\n'+dms(lon,'E','W');
  if(m==='sk42')return sk42F(lat,lon);
  const u=utmF(lat,lon);return m==='utm'?u.z+u.b+' '+u.E.toFixed(0)+' '+u.N.toFixed(0):mgrsF(u)}
-let LAST=null;
+let LAST=null,TL=null;
 function show(){if(LAST)$('r1').textContent=fmt(LAST.lat,LAST.lon,$('oc').value)}
 $('oc').onchange=show;
+$('tc').innerHTML=$('oc').innerHTML;
 $('cs').onchange=()=>{mode();$('oc').value=$('cs').value;show()};
+$('hm').onchange=()=>{$('tw').hidden=$('hm').value!=='to'};
 const dec=new Map();
 async function tile(x,y){
  const k=x+'/'+y;if(dec.has(k))return dec.get(k);
@@ -171,31 +196,61 @@ function dest(lat,lon,az,d){
  const l2=l1+Math.atan2(Math.sin(th)*Math.sin(de)*Math.cos(f1),Math.cos(de)-Math.sin(f1)*Math.sin(f2));
  return[f2/RAD,((l2/RAD+540)%360)-180]}
 async function trace(lat,lon,H,az,ang){
- const t=Math.tan(ang*RAD),step=15,max=40000,zr=d=>H-d*t-d*d/(2*Rr);
- let pd=0,pdiff=zr(0)-await elev(lat,lon);
+ const t=Math.tan(ang*RAD),step=15,max=40000,zr=d=>H-d*t-d*d/(2*Rr),g0=await elev(lat,lon),P=[[0,g0]];
+ let pd=0,pdiff=zr(0)-g0;
+ if(pdiff<=0)return null;
  for(let d=step;d<=max;d+=step){
-  const[la,lo]=dest(lat,lon,az,d),diff=zr(d)-await elev(la,lo);
-  if(diff<=0){const dd=pd+pdiff/(pdiff-diff)*(d-pd),[a2,o2]=dest(lat,lon,az,dd);return{lat:a2,lon:o2,d:dd,e:zr(dd)}}
-  pd=d;pdiff=diff}
+  const[la,lo]=dest(lat,lon,az,d),gz=await elev(la,lo),diff=zr(d)-gz;
+  if(diff<=0){const dd=pd+pdiff/(pdiff-diff)*(d-pd),[a2,o2]=dest(lat,lon,az,dd);return{lat:a2,lon:o2,d:dd,e:zr(dd),prof:P}}
+  P.push([d,gz]);pd=d;pdiff=diff}
  return null}
+async function errPts(lat,lon,H,az,ang,da,di,dh){
+ const pts=[];
+ for(const a of[-da,da])for(const i of[-di,di])for(const h of[-dh,dh]){
+  const an=ang+i;if(an<=0.2||an>90)continue;
+  try{const t=await trace(lat,lon,H+h,az+a,an);if(t)pts.push([t.lat,t.lon])}catch(x){}}
+ return pts}
+const dm=(a,b)=>Math.hypot((a[0]-b[0])*111195,(a[1]-b[1])*111195*Math.cos(a[0]*RAD));
+function hull(p){
+ p=p.map(a=>[a[1],a[0]]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+ const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];
+ for(const q of p){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q)}
+ for(const q of p.slice().reverse()){while(up.length>1&&cr(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q)}
+ return lo.slice(0,-1).concat(up.slice(0,-1)).map(a=>[a[1],a[0]])}
+function drawProf(P,H,r){
+ const c=$('pf'),w=c.clientWidth||300,h=150,k=window.devicePixelRatio||1;
+ c.width=w*k;c.height=h*k;const x=c.getContext('2d');x.scale(k,k);
+ const pts=P.filter(a=>a[0]<=r.d).concat([[r.d,r.e]]);
+ const lo=Math.min(...pts.map(a=>a[1]),r.e),hi=Math.max(H,...pts.map(a=>a[1])),pad=18,
+  sx=d=>pad+d/r.d*(w-2*pad),sy=z=>h-pad-(z-lo)/((hi-lo)||1)*(h-2*pad);
+ x.fillStyle='#8b7355';x.beginPath();x.moveTo(sx(0),h);
+ pts.forEach(a=>x.lineTo(sx(a[0]),sy(a[1])));x.lineTo(sx(r.d),h);x.fill();
+ x.strokeStyle='#ff3b30';x.lineWidth=2;x.beginPath();x.moveTo(sx(0),sy(H));x.lineTo(sx(r.d),sy(r.e));x.stroke();
+ x.fillStyle='#1d6fe8';x.beginPath();x.arc(sx(0),sy(H),5,0,7);x.fill();
+ x.fillStyle='#ff3b30';x.beginPath();x.arc(sx(r.d),sy(r.e),5,0,7);x.fill();
+ x.fillStyle='#888';x.font='11px sans-serif';
+ x.fillText(hi.toFixed(0)+' м',2,11);x.fillText(lo.toFixed(0)+' м',2,h-4);x.fillText(r.d.toFixed(0)+' м',w-55,h-4)}
 let MAP,LY,BASE;
 const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',OSM='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 function setBase(){if(!MAP)return;if(BASE)MAP.removeLayer(BASE);
  const sat=$('bm').value==='sat';
  BASE=L.tileLayer(sat?ESRI:OSM,{maxZoom:sat?19:18,maxNativeZoom:18,attribution:sat?'Esri World Imagery':'© OpenStreetMap'}).addTo(MAP);BASE.bringToBack()}
 $('bm').onchange=setBase;
-function drawMap(lat,lon,r,az){
+function ensureMap(){
  $('mc').hidden=false;
- if(!window.L){$('mp').textContent='Карта не загрузилась (нет сети для библиотеки карты).';return}
+ if(!window.L){$('mp').textContent='Карта не загрузилась (нет сети для библиотеки карты).';return false}
  if(!MAP){MAP=L.map('mp');LY=L.layerGroup().addTo(MAP);setBase()}
- LY.clearLayers();MAP.invalidateSize();
- const p=[lat,lon],q=[r.lat,r.lon];
+ LY.clearLayers();MAP.invalidateSize();return true}
+function mk(p,c,t,d){return L.circleMarker(p,{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:1}).addTo(LY).bindTooltip(t,{permanent:true,direction:d})}
+function drawMap(lat,lon,r,az,pts,rad,m){
+ if(!ensureMap())return;
+ const p=[lat,lon],q=[r.lat,r.lon],bd=L.latLngBounds([p,q]);
+ if(m==='area'&&pts.length>2){bd.extend(L.polygon(hull(pts),{color:'#ff9500',weight:2,fillOpacity:.25}).addTo(LY).getBounds())}
+ if(m==='circle'&&rad>0){bd.extend(L.circle(q,{radius:rad,color:'#ff9500',weight:2,fillOpacity:.2}).addTo(LY).getBounds())}
  L.polyline([p,q],{color:'#ff3b30',weight:3}).addTo(LY);
- L.circleMarker(p,{radius:8,color:'#fff',weight:2,fillColor:'#1d6fe8',fillOpacity:1}).addTo(LY)
-  .bindTooltip('Дрон<br>'+lat.toFixed(6)+', '+lon.toFixed(6)+'<br>азимут '+az+'°',{permanent:true,direction:'top'});
- L.circleMarker(q,{radius:8,color:'#fff',weight:2,fillColor:'#ff3b30',fillOpacity:1}).addTo(LY)
-  .bindTooltip('Цель<br>'+r.lat.toFixed(6)+', '+r.lon.toFixed(6),{permanent:true,direction:'bottom'});
- MAP.fitBounds([p,q],{padding:[70,70]})}
+ mk(p,'#1d6fe8','Дрон<br>'+lat.toFixed(6)+', '+lon.toFixed(6)+'<br>азимут '+az+'°','top');
+ mk(q,'#ff3b30','Цель<br>'+r.lat.toFixed(6)+', '+r.lon.toFixed(6),'bottom');
+ MAP.fitBounds(bd,{padding:[70,70]})}
 $('go').onclick=async()=>{
  const e=$('err');e.textContent='';$('out').hidden=true;
  const[lat,lon]=pos(),alt=num('alt'),az=num('az'),ang=Math.abs(num('ang'));
@@ -204,7 +259,9 @@ $('go').onclick=async()=>{
  if(lat<BB.s||lat>BB.n||lon<BB.w||lon>BB.e){e.textContent='Дрон вне района Армении.';return}
  $('go').disabled=true;e.textContent='Считаю…';
  try{
-  const g0=await elev(lat,lon),H=$('hm').value==='rel'?g0+alt:alt;
+  const g0=await elev(lat,lon),hm=$('hm').value;let H;
+  if(hm==='rel')H=g0+alt;else if(hm==='asl')H=alt;
+  else{const tk=num('to');if(isNaN(tk)){e.textContent='Введите высоту точки взлёта над морем.';return}H=tk+alt}
   if(H<=g0){e.textContent='Дрон не выше земли под ним: проверьте высоту.';return}
   const r=await trace(lat,lon,H,az,ang);
   if(!r){e.textContent='Луч не достиг земли за 40 км (наклон слишком мал).';return}
@@ -213,10 +270,53 @@ $('go').onclick=async()=>{
   $('rd').textContent=r.d.toFixed(0)+' м';$('rs').textContent=Math.hypot(r.d,H-r.e).toFixed(0)+' м';
   $('re').textContent=r.e.toFixed(0)+' м';$('rh').textContent=H.toFixed(0)+' м';
   $('map').href='https://maps.apple.com/?ll='+r.lat.toFixed(6)+','+r.lon.toFixed(6)+'&q=Цель';
-  $('out').hidden=false;
-  try{drawMap(lat,lon,r,az)}catch(x){}
+  $('rq').textContent='…';$('out').hidden=false;
+  try{drawProf(r.prof,H,r)}catch(x){}
+  const m=$('eb').value;let pts=[],rad=0;
+  if(m!=='none'){
+   e.textContent='Считаю область погрешности…';
+   pts=await errPts(lat,lon,H,az,ang,Math.abs(num('ea'))||0,Math.abs(num('ei'))||0,Math.abs(num('eh'))||0);
+   e.textContent='';
+   rad=pts.length?Math.max(...pts.map(x=>dm([r.lat,r.lon],x))):0}
+  $('rq').textContent=m==='none'?'—':'±'+rad.toFixed(0)+' м';
+  try{drawMap(lat,lon,r,az,pts,rad,m)}catch(x){}
  }catch(x){e.textContent='Нет данных рельефа для этого места. Скачайте рельеф при интернете.'}
  finally{$('go').disabled=false}
+};
+function rt(){
+ if(!TL)return;
+ $('tr').innerHTML='<div><span>Координаты цели</span><b>'+fmt(TL.la,TL.lo,$('tc').value)+'</b></div>'
+ +'<div><span>От точки 1</span><b>'+TL.t1.toFixed(0)+' м</b></div>'
+ +'<div><span>От точки 2</span><b>'+TL.t2.toFixed(0)+' м</b></div>'
+ +'<div><span>Угол пересечения</span><b>'+TL.ang.toFixed(0)+'°'+(TL.ang<15?' (мал, точность низкая)':'')+'</b></div>'
+ +'<div><span>Высота рельефа</span><b>'+TL.el+'</b></div>';
+ $('tr').hidden=false}
+$('tc').onchange=rt;
+$('tg').onclick=async()=>{
+ const e=$('te');e.textContent='';$('tr').hidden=true;
+ const a=coord('a1'),o=coord('o1'),b=coord('a2'),p=coord('o2'),z1=num('z1'),z2=num('z2');
+ if([a,o,b,p,z1,z2].some(isNaN)){e.textContent='Заполните все поля.';return}
+ const k=Rr*RAD,c=Math.cos(a*RAD),wx=(p-o)*k*c,wy=(b-a)*k,
+  d1=[Math.sin(z1*RAD),Math.cos(z1*RAD)],d2=[Math.sin(z2*RAD),Math.cos(z2*RAD)],
+  det=d2[0]*d1[1]-d1[0]*d2[1];
+ let ang=Math.abs(z1-z2)%180;ang=Math.min(ang,180-ang);
+ if(Math.abs(det)<1e-3){e.textContent='Лучи почти параллельны: пересечения нет.';return}
+ const t1=(d2[0]*wy-d2[1]*wx)/det,t2=(d1[0]*wy-d1[1]*wx)/det;
+ if(t1<=0||t2<=0){e.textContent='Лучи расходятся: проверьте азимуты и положение точек.';return}
+ const la=a+t1*d1[1]/k,lo=o+t1*d1[0]/(k*c);
+ let el='нет данных';
+ try{el=(await elev(la,lo)).toFixed(0)+' м'}catch(x){}
+ TL={la,lo,t1,t2,ang,el};rt();
+ try{
+  if(!ensureMap())return;
+  const q=[la,lo],P1=[a,o],P2=[b,p];
+  L.polyline([P1,q],{color:'#ff3b30',weight:3}).addTo(LY);
+  L.polyline([P2,q],{color:'#ff3b30',weight:3}).addTo(LY);
+  mk(P1,'#1d6fe8','Точка 1<br>азимут '+z1+'°','top');
+  mk(P2,'#1d6fe8','Точка 2<br>азимут '+z2+'°','top');
+  mk(q,'#ff3b30','Цель<br>'+la.toFixed(6)+', '+lo.toFixed(6),'bottom');
+  MAP.fitBounds(L.latLngBounds([P1,P2,q]),{padding:[70,70]})
+ }catch(x){}
 };
 async function status(){
  const n=tileList().length,c=await caches.open(DEM),k=(await c.keys()).length;
