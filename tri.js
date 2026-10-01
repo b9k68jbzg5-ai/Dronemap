@@ -9,10 +9,23 @@ function ix(a,o,z1,b,p,z2){
 const row1=$('a1').closest('.row'),row2=$('a2').closest('.row');
 row1.insertAdjacentHTML('beforebegin','<label>Система координат точек дрона</label><select id="ts">'+$('oc').innerHTML+'</select><div id="tq" hidden><label>Точка 1: координаты</label><input id="q1"><label>Точка 2: координаты</label><input id="q2"></div>');
 $('tg').insertAdjacentHTML('beforebegin','<div class="row"><div><label>Азимут ±, °</label><input id="tea" value="1" inputmode="decimal"></div><div><label>Положение дрона ±, м</label><input id="tep" value="3" inputmode="decimal"></div></div>');
-$('ts').onchange=()=>{const m=$('ts').value,one=m!=='dd'&&m!=='dms';
+function tph(){const m=$('ts').value,one=m!=='dd'&&m!=='dms';
  row1.hidden=row2.hidden=one;$('tq').hidden=!one;
- const ph={utm:'38T 444000 4450000',mgrs:'38TLK1234567890',sk42:'4450000 8512345'}[m]||'';
- $('q1').placeholder=$('q2').placeholder=ph};
+ $('q1').placeholder=$('q2').placeholder={utm:'38T 444000 4450000',mgrs:'38TLK1234567890',sk42:'4450000 8512345'}[m]||'';
+ if(!one){$('a1').placeholder=$('a2').placeholder=m==='dd'?'40.175000':'40 10 30.5 N';$('o1').placeholder=$('o2').placeholder=m==='dd'?'44.504000':'44 30 14.4 E'}}
+$('ts').onchange=tph;tph();
+$('tr').insertAdjacentHTML('afterend','<div id="tp" hidden><label>Профиль высот вдоль линии взгляда: точка 1 → цель</label><canvas id="pf1"></canvas><label>Точка 2 → цель</label><canvas id="pf2"></canvas></div>');
+async function drawT(id,P,q){
+ const c=$(id),N=64,pts=[],dist=dm(P,q);
+ for(let i=0;i<=N;i++){const f=i/N;try{pts.push(await elev(P[0]+(q[0]-P[0])*f,P[1]+(q[1]-P[1])*f))}catch(x){return false}}
+ const w=c.clientWidth||300,h=150,kk=window.devicePixelRatio||1;c.width=w*kk;c.height=h*kk;
+ const x=c.getContext('2d');x.scale(kk,kk);
+ const lo=Math.min(...pts),hi=Math.max(...pts),pad=18,sx=i=>pad+i/N*(w-2*pad),sy=z=>h-pad-(z-lo)/((hi-lo)||1)*(h-2*pad);
+ x.fillStyle='#8b7355';x.beginPath();x.moveTo(sx(0),h);pts.forEach((z,i)=>x.lineTo(sx(i),sy(z)));x.lineTo(sx(N),h);x.fill();
+ x.fillStyle='#1d6fe8';x.beginPath();x.arc(sx(0),sy(pts[0]),5,0,7);x.fill();
+ x.fillStyle='#ff3b30';x.beginPath();x.arc(sx(N),sy(pts[N]),5,0,7);x.fill();
+ x.fillStyle='#888';x.font='11px sans-serif';
+ x.fillText(hi.toFixed(0)+' м',2,11);x.fillText(lo.toFixed(0)+' м',2,h-4);x.fillText(dist.toFixed(0)+' м',w-55,h-4);return true}
 function pp(i){const m=$('ts').value;
  if(m==='dd'||m==='dms')return[coord(i==1?'a1':'a2'),coord(i==1?'o1':'o2')];
  const cs=$('cs'),ps=$('pos'),oc=cs.value,ov=ps.value;
@@ -29,7 +42,7 @@ function rt2(){
  $('tr').hidden=false}
 $('tc').onchange=rt2;
 $('tg').onclick=async()=>{
- const e=$('te');e.textContent='';$('tr').hidden=true;
+ const e=$('te');e.textContent='';$('tr').hidden=true;$('tp').hidden=true;
  const[a,o]=pp(1),[b,p]=pp(2),z1=num('z1'),z2=num('z2'),ea=Math.abs(num('tea'))||0,ep=Math.abs(num('tep'))||0;
  if([a,o,b,p,z1,z2].some(isNaN)){e.textContent='Заполните все поля (проверьте формат координат).';return}
  const m=ix(a,o,z1,b,p,z2);
@@ -41,6 +54,8 @@ $('tg').onclick=async()=>{
  const rad=Math.max(0,...pts.map(q=>dm([m.la,m.lo],q)));
  let el='нет данных';try{el=(await elev(m.la,m.lo)).toFixed(0)+' м'}catch(x){}
  TL={la:m.la,lo:m.lo,t1:m.t1,t2:m.t2,ang,el,rad,part:pts.length<tot};rt2();
+ $('tp').hidden=false;
+ const g1=await drawT('pf1',[a,o],[m.la,m.lo]),g2=await drawT('pf2',[b,p],[m.la,m.lo]);$('tp').hidden=!(g1&&g2);
  try{
   if(!ensureMap())return;
   const q=[m.la,m.lo],P1=[a,o],P2=[b,p],bd=L.latLngBounds([P1,P2,q]);
@@ -53,4 +68,11 @@ $('tg').onclick=async()=>{
   MAP.fitBounds(bd,{padding:[70,70]})
  }catch(x){}
 };
+$('az').closest('.row').insertAdjacentHTML('beforebegin','<label>Шаг кнопок ±, °</label><select id="st"><option>0.1</option><option>0.5</option><option selected>1</option><option>5</option></select>');
+function pm(id,tilt){const i=$(id),d=document.createElement('div');d.style.cssText='display:flex;gap:6px';
+ i.parentNode.insertBefore(d,i);i.style.cssText='flex:1;min-width:0';
+ const mk=(t,sg)=>{const b=document.createElement('button');b.type='button';b.textContent=t;b.style.cssText='width:46px;flex:none;margin:0;padding:0;font-size:22px';
+  b.onclick=()=>{let v=parseFloat(i.value.replace(',','.'));if(isNaN(v))v=0;if(tilt)v=Math.min(90,Math.max(0,Math.abs(v)+sg*parseFloat($('st').value)));else v=((v+sg*parseFloat($('st').value))%360+360)%360;i.value=+v.toFixed(2)};return b};
+ d.append(mk('−',-1),i,mk('+',1))}
+pm('az');pm('ang',1);pm('z1');pm('z2');
 })();
