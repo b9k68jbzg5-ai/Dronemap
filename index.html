@@ -27,6 +27,7 @@ a{color:var(--ac)}
 #mp{height:360px;border-radius:12px;margin-top:8px}
 .leaflet-tooltip{font-size:12px;line-height:1.3}
 </style></head><body>
+<script>window.onerror=function(m,s,l){var d=document.getElementById('dlst');if(d)d.textContent='Ошибка скрипта: '+m+' (строка '+l+')';return false};</script>
 <h1>Точка, куда смотрит дрон</h1>
 <div class="card">
 <label>Система координат</label>
@@ -181,7 +182,7 @@ let MAP,LY,BASE;
 const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',OSM='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 function setBase(){if(!MAP)return;if(BASE)MAP.removeLayer(BASE);
  const sat=$('bm').value==='sat';
- BASE=L.tileLayer(sat?ESRI:OSM,{maxZoom:sat?19:18,maxNativeZoom:sat?18:18,attribution:sat?'Esri World Imagery':'© OpenStreetMap'}).addTo(MAP);BASE.bringToBack()}
+ BASE=L.tileLayer(sat?ESRI:OSM,{maxZoom:sat?19:18,maxNativeZoom:18,attribution:sat?'Esri World Imagery':'© OpenStreetMap'}).addTo(MAP);BASE.bringToBack()}
 $('bm').onchange=setBase;
 function drawMap(lat,lon,r,az){
  $('mc').hidden=false;
@@ -235,4 +236,5 @@ $('dl').onclick=async()=>{
 };
 (async()=>{try{await Promise.race([status(),new Promise((_,j)=>setTimeout(j,4000))])}catch(e){$('dlst').textContent='Рельеф Армении: не удалось проверить, нажмите «Скачать»'}})();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 </script></body></html>
